@@ -7,7 +7,7 @@
 
 1. Клонируйте репозиторий:
 ```
-https://github.com/oMakom/CoursePaperOOP.git
+https://github.com/oMakom/CoursePaperOOP_DB.git
 ```
 
 2. Установите зависимости:
