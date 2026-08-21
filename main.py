@@ -1,40 +1,11 @@
-from src.aircraft_data_handler import Aeroplane
-from src.api_connector import ApiAeroplanesCountry, ApiCountryCoordinates
-from src.interface import (filter_aeroplanes, get_aeroplanes_by_altitude, get_aeroplanes_by_country,
-                           get_top_aeroplanes, print_all_aeroplanes, sort_aeroplanes)
-from src.json_saver import JSONSaver
 
-# Создание экземпляра класса для работы с API страны
-api_county = ApiCountryCoordinates()
-# Получение информации о коордмнатых страны с nominatim.openstreetmap.org
-geo_coord = api_county.fetch_data("RUSSIA")
-# Создание экземпляра класса для работы с API самолетов
-api_aeroplanes = ApiAeroplanesCountry()
-# Получение информации о самолетах с opensky-network.org
-aeroplanes_list = api_aeroplanes.fetch_data(geo_coord)
-# Преобразование набора данных в список объектов
-aeroplanes = Aeroplane.cast_to_object_list(aeroplanes_list)
-# Пример работы контструктора класса с одним самолетом
-aeroplane = Aeroplane("UAL1621", "United States", 268.79, 10203.18)
-aeroplane_2 = Aeroplane("UAL1621", "United States", 200.79, 10203.18)
-aeroplane_3 = Aeroplane("UAL", "United States", 150.79, 10203.18)
-print(aeroplane)
-print(f"{aeroplanes[0].velocity}, {aeroplanes[0].altitude}")
-print(f"{aeroplanes[2].velocity}, {aeroplanes[2].altitude}")
-print(f"1 > 3 :{aeroplanes[0] > aeroplanes[2]}")
-print(f"1 = 3 :{aeroplanes[0] == aeroplanes[2]}")
-print(f"1 < 3 :{aeroplanes[0] < aeroplanes[2]}")
-# Сохранение информации в файл
-json_saver = JSONSaver()
-json_saver.add_aeroplane(aeroplanes)
-json_saver.add_aeroplane(aeroplane)
-json_saver.add_aeroplane(aeroplane_2)
-json_saver.add_aeroplane(aeroplane_3)
-json_saver.delete_aeroplane("DMFEY")
+from database import DBManager
 
-# Функция для взаимодействия с пользователем
+import os
 
+from dotenv import load_dotenv
 
+"""
 def user_interaction() -> None:
     while True:
         country = input("Введите название страны (пример ввода: RUSSIA): ")  # Например RUSSIA
@@ -102,7 +73,21 @@ def user_interaction() -> None:
 
     # вывод результата
     print_all_aeroplanes(top_n_aeroplanes)
+"""
 
+def main_db():
+    load_dotenv()
+
+    db_config = {
+        'user': os.getenv('POSTGRES_USER'),
+        'password': os.getenv('POSTGRES_PASSWORD'),
+        'host': os.getenv('POSTGRES_HOST'),
+        'port': os.getenv('POSTGRES_PORT'),
+        'dbname': os.getenv('POSTGRES_DB')
+    }
+
+    db = DBManager(**db_config)
+    db.close()
 
 if __name__ == "__main__":
-    user_interaction()
+    main_db()
