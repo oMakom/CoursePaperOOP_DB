@@ -2,7 +2,8 @@ import psycopg2
 
 
 class DBManager:
-    """Класс для работы с БД PostgreSQL"""
+    """Класс для работы с БД PostgreSQL.
+    Отвечает за создание таблиц, загрузку данных и выполнение аналитических запросов"""
 
     def __init__(
         self,
@@ -12,8 +13,24 @@ class DBManager:
         host: str = "localhost",
         port: str = "5432",
     ):
+        """
+        Инициализирует соединение с базой данных.
+            :dbname: Имя базы данных.
+            :user: Пользователь БД.
+            :password: Пароль пользователя.
+            :host: Хост БД.
+            :port: Порт БД.
+        """
         self.conn = psycopg2.connect(dbname=dbname, user=user, password=password, host=host, port=port)
         self.cur = self.conn.cursor()
+
+    @staticmethod
+    def __db_date_tuple_to_dict(columns: list, rows: list[tuple]) -> list[dict]:
+        """Преобразует данные из базы дынных в удобочитаемый вид(список кортежей в список словарей)"""
+        date = []
+        for row in rows:
+            date.append(dict(zip(columns, row)))
+        return date
 
     def _create_table(self, table_name: str) -> None:
         """Создание двух таблиц countries и aeroplanes"""
@@ -44,16 +61,16 @@ class DBManager:
                    """)
 
     def close(self) -> None:
-        """Метод для закрытия соединений с базой данный"""
+        """Метод для закрытия соединений с базой данных"""
         if self.cur is not None:
             self.cur.close()
         if self.conn is not None:
             self.conn.close()
 
     def refresh_tables(self) -> None:
-        """Метод для удаляет таблиц из базы данных и перезаписи новых"""
+        """Метод для удаления таблиц из базы данных и перезаписи новых"""
         with self.conn:
-            self.cur.execute("""DROP TABLE IF EXISTS aeroplanes""")
+            self.cur.execute("""DROP TABLE IF EXISTS aeroplanes CASCADE""")
             self.cur.execute("""DROP TABLE IF EXISTS countries""")
         self._create_table("countries")
         self._create_table("aeroplanes")
@@ -78,16 +95,9 @@ class DBManager:
                     (country_id, date[1], date[2], date[9], date[7]),
                 )
 
-    @staticmethod
-    def __db_date_tuple_to_dict(columns: list, rows: list[tuple]) -> list[dict]:
-        """Преобразует данные из базы дынных в удобочитаемый вид(список кортежей в список словарей)"""
-        date = []
-        for row in rows:
-            date.append(dict(zip(columns, row)))
-        return date
-
     def get_countries_and_aeroplanes_count(self) -> list[dict]:
-        """получает список всех стран и количество самолетов в их воздушных пространствах"""
+        """получает список всех стран и количество самолетов в их воздушных пространствах.
+            :return: Список словарей [{'country_name': ..., 'count_aeroplanes': ...}]"""
         with self.conn:
             self.cur.execute("""SELECT country_name, COUNT(aeroplanes.callsign) AS count_aeroplanes FROM countries
                                 JOIN aeroplanes USING(country_id)
@@ -146,7 +156,7 @@ class DBManager:
             aeroplanes_with_higher_speed = self.__db_date_tuple_to_dict(columns, rows)
             return aeroplanes_with_higher_speed
 
-    def get_aeroplanes_with_keyword(self, search: str) -> str | list[dict]:
+    def get_aeroplanes_with_keyword(self, search: str) -> list[dict]:
         """получает список всех самолетов, в позывном которых содержатся переданные в метод символы"""
         # если передана не строка, возвращаем пустой список
         if not isinstance(search, str):
