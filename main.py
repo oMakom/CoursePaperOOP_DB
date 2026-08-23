@@ -91,7 +91,7 @@ def main_db():
 
     db = DBManager(**db_config)
     """
-    # Код для добавления данных 
+    # Код для добавления данных, можно закомментировать после добавления и заполнения таблиц
     db.refresh_tables()
     for country in country_list:
         api_county = ApiCountryCoordinates()
