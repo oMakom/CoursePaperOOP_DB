@@ -1,18 +1,24 @@
 import psycopg2
-from psycopg2._psycopg import List
 
 
 class DBManager:
-    """ Класс для работы с БД PostgreSQL"""
-    def __init__(self, dbname: str, user: str, password: str, host: str = 'localhost', port: str = '5432',
-                ):
+    """Класс для работы с БД PostgreSQL"""
+
+    def __init__(
+        self,
+        dbname: str,
+        user: str,
+        password: str,
+        host: str = "localhost",
+        port: str = "5432",
+    ):
         self.conn = psycopg2.connect(dbname=dbname, user=user, password=password, host=host, port=port)
         self.cur = self.conn.cursor()
 
-    def _create_table(self,table_name: str):
+    def _create_table(self, table_name: str) -> None:
         """Создание двух таблиц countries и aeroplanes"""
 
-        if table_name == 'countries':
+        if table_name == "countries":
             with self.conn:
                 self.cur.execute("""
                    CREATE TABLE IF NOT EXISTS countries (
@@ -24,7 +30,7 @@ class DBManager:
                    lo_max DOUBLE PRECISION
                    );
                    """)
-        if table_name == 'aeroplanes':
+        if table_name == "aeroplanes":
             with self.conn:
                 self.cur.execute("""
                    CREATE TABLE IF NOT EXISTS aeroplanes (
@@ -37,22 +43,22 @@ class DBManager:
                    );
                    """)
 
-    def close(self):
+    def close(self) -> None:
         """Метод для закрытия соединений с базой данный"""
         if self.cur is not None:
             self.cur.close()
         if self.conn is not None:
             self.conn.close()
 
-    def refresh_tables(self):
+    def refresh_tables(self) -> None:
         """Метод для удаляет таблиц из базы данных и перезаписи новых"""
         with self.conn:
             self.cur.execute("""DROP TABLE IF EXISTS aeroplanes""")
             self.cur.execute("""DROP TABLE IF EXISTS countries""")
-        self._create_table('countries')
-        self._create_table('aeroplanes')
+        self._create_table("countries")
+        self._create_table("aeroplanes")
 
-    def insert_data(self, country: str, db_date_country: list, db_date_aeroplanes: list):
+    def insert_data(self, country: str, db_date_country: list, db_date_aeroplanes: list) -> None:
         """Функция обновляет данные по стране и самолетам в ее границах
         country - страна
         db_date_country - 'boundingbox' указанной страны
@@ -60,13 +66,17 @@ class DBManager:
         """
         with self.conn:
             self.cur.execute(
-                f"INSERT INTO countries (country_name, la_min, la_max, lo_min, lo_max) VALUES (%s, %s, %s, %s, %s)  RETURNING country_id;",
-                (country, db_date_country[0], db_date_country[1], db_date_country[2], db_date_country[3]))
+                """INSERT INTO countries (country_name, la_min, la_max, lo_min, lo_max)
+                            VALUES (%s, %s, %s, %s, %s)  RETURNING country_id;""",
+                (country, db_date_country[0], db_date_country[1], db_date_country[2], db_date_country[3]),
+            )
             country_id = self.cur.fetchone()[0]
             for date in db_date_aeroplanes:
                 self.cur.execute(
-                    f"INSERT INTO aeroplanes (country_id, callsign, reg_country, velocity, altitude) VALUES (%s, %s, %s, %s, %s)",
-                    (country_id, date[1], date[2], date[9], date[7]))
+                    """INSERT INTO aeroplanes (country_id, callsign, reg_country, velocity, altitude)
+                                VALUES (%s, %s, %s, %s, %s)""",
+                    (country_id, date[1], date[2], date[9], date[7]),
+                )
 
     @staticmethod
     def __db_date_tuple_to_dict(columns: list, rows: list[tuple]) -> list[dict]:
@@ -82,9 +92,9 @@ class DBManager:
             self.cur.execute("""SELECT country_name, COUNT(aeroplanes.callsign) AS count_aeroplanes FROM countries
                                 JOIN aeroplanes USING(country_id)
                                 GROUP by country_name;""")
-            #получаем данные столбцов(строки)
+            # получаем данные столбцов(строки)
             rows = self.cur.fetchall()
-            #получаем имена столбцов
+            # получаем имена столбцов
             columns = [column_names[0] for column_names in self.cur.description]
             # Преобразуем список картажей в список словарей для читаемости полученых данных
             countries_and_aeroplanes_count = self.__db_date_tuple_to_dict(columns, rows)
@@ -117,9 +127,43 @@ class DBManager:
             # Преобразуем список картажей в список словарей для читаемости полученых данных
             avg_speed = self.__db_date_tuple_to_dict(columns, rows)
             return avg_speed
-    def get_aeroplanes_with_higher_speed(self) -> None:
+
+    def get_aeroplanes_with_higher_speed(self) -> list[dict]:
         """получает список всех самолетов, у которых скорость выше средней"""
-        pass
-    def get_aeroplanes_with_keyword(self) -> None:
+        # получаем среднюю скорость по всем самолетам в виде: [{'aeroplanes_avg_velocity': 175.46884977852534}]
+        avg_speed = self.get_avg_speed()
+        with self.conn:
+            self.cur.execute(
+                """SELECT DISTINCT ON (callsign) * FROM aeroplanes
+                                WHERE velocity > %s;""",
+                (avg_speed[0]["aeroplanes_avg_velocity"],),
+            )
+            # получаем данные столбцов(строки)
+            rows = self.cur.fetchall()
+            # получаем имена столбцов
+            columns = [column_names[0] for column_names in self.cur.description]
+            # Преобразуем список картажей в список словарей для читаемости полученых данных
+            aeroplanes_with_higher_speed = self.__db_date_tuple_to_dict(columns, rows)
+            return aeroplanes_with_higher_speed
+
+    def get_aeroplanes_with_keyword(self, search: str) -> str | list[dict]:
         """получает список всех самолетов, в позывном которых содержатся переданные в метод символы"""
-        pass
+        # если передана не строка, возвращаем пустой список
+        if not isinstance(search, str):
+            return []
+        # если строка поиска длиннее callsign, возвращаем пустой список
+        if len(search) > 8:
+            return []
+        # создаем шаблон для запроса и переводим в верхний регистр(позывные приходят в врехнем регистре)
+        pattern = f"%{search.upper()}%"
+        with self.conn:
+            self.cur.execute(
+                """SELECT DISTINCT ON (callsign) * FROM aeroplanes WHERE callsign  LIKE %s;""", (pattern,)
+            )
+            # получаем данные столбцов(строки)
+            rows = self.cur.fetchall()
+            # получаем имена столбцов
+            columns = [column_names[0] for column_names in self.cur.description]
+            # Преобразуем список картажей в список словарей для читаемости полученых данных
+            aeroplanes_with_keyword = self.__db_date_tuple_to_dict(columns, rows)
+            return aeroplanes_with_keyword
