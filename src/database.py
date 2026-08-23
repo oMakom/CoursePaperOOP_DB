@@ -1,4 +1,6 @@
 import psycopg2
+from psycopg2._psycopg import List
+
 
 class DBManager:
     """ Класс для работы с БД PostgreSQL"""
@@ -6,9 +8,6 @@ class DBManager:
                 ):
         self.conn = psycopg2.connect(dbname=dbname, user=user, password=password, host=host, port=port)
         self.cur = self.conn.cursor()
-        self._refresh_tables()
-        self._create_table('countries')
-        self._create_table('aeroplanes')
 
     def _create_table(self,table_name: str):
         """Создание двух таблиц countries и aeroplanes"""
@@ -45,11 +44,13 @@ class DBManager:
         if self.conn is not None:
             self.conn.close()
 
-    def _refresh_tables(self):
-        """Метод для удаляет таблиц из базы данных"""
+    def refresh_tables(self):
+        """Метод для удаляет таблиц из базы данных и перезаписи новых"""
         with self.conn:
             self.cur.execute("""DROP TABLE IF EXISTS aeroplanes""")
             self.cur.execute("""DROP TABLE IF EXISTS countries""")
+        self._create_table('countries')
+        self._create_table('aeroplanes')
 
     def insert_data(self, country: str, db_date_country: list, db_date_aeroplanes: list):
         """Функция обновляет данные по стране и самолетам в ее границах
@@ -67,9 +68,34 @@ class DBManager:
                     f"INSERT INTO aeroplanes (country_id, callsign, reg_country, velocity, altitude) VALUES (%s, %s, %s, %s, %s)",
                     (country_id, date[1], date[2], date[9], date[7]))
 
-    def get_countries_and_aeroplanes_count(self) -> None:
+    def get_countries_and_aeroplanes_count(self) -> list[dict]:
         """получает список всех стран и количество самолетов в их воздушных пространствах"""
-        pass
+        with self.conn:
+            self.cur.execute("""SELECT country_name, COUNT(aeroplanes.callsign) AS count_aeroplanes FROM countries
+                                JOIN aeroplanes USING(country_id)
+                                GROUP by country_name;""")
+            #получаем данные столбцов(строки)
+            rows = self.cur.fetchall()
+            #получаем имена столбцов
+            columns = [column_names[0] for column_names in self.cur.description]
+            """
+            # Преобразуем список картажей в список словарей для читаемости полученых данных
+            countries_and_aeroplanes_count = []
+            for row in rows:
+                countries_and_aeroplanes_count.append(dict(zip(columns, row)))
+            """
+            # Преобразуем список картажей в список словарей для читаемости полученых данных
+            countries_and_aeroplanes_count = self.__db_date_tuple_to_dict(columns, rows)
+            return countries_and_aeroplanes_count
+
+    @staticmethod
+    def __db_date_tuple_to_dict(columns: list, rows: list[tuple]) -> list[dict]:
+        """Преобразует данные из базы дынных в удобочитаемый вид(список кортежей в список словарей)"""
+        date = []
+        for row in rows:
+            date.append(dict(zip(columns, row)))
+        return date
+
     def get_all_aeroplanes(self) -> None:
         """получает список всех воздушных судов"""
         pass
