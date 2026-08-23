@@ -93,7 +93,7 @@ class DBManager:
     def get_all_aeroplanes(self) -> list[dict]:
         """получает список всех воздушных судов"""
         with self.conn:
-            self.cur.execute("""SELECT DISTINCT ON (callsign) * FROM aeroplanes""")
+            self.cur.execute("""SELECT DISTINCT ON (callsign) * FROM aeroplanes;""")
             # получаем данные столбцов(строки)
             rows = self.cur.fetchall()
             # получаем имена столбцов
@@ -102,9 +102,21 @@ class DBManager:
             all_aeroplanes = self.__db_date_tuple_to_dict(columns, rows)
             return all_aeroplanes
 
-    def get_avg_speed(self) -> None:
+    def get_avg_speed(self) -> list[dict]:
         """получает среднюю скорость по самолетам"""
-        pass
+        with self.conn:
+            self.cur.execute("""SELECT AVG(velocity) as aeroplanes_avg_velocity
+                                FROM (
+                                    SELECT DISTINCT ON (callsign) velocity
+                                    FROM aeroplanes
+                                    );""")
+            # получаем данные столбцов(строки)
+            rows = self.cur.fetchall()
+            # получаем имена столбцов
+            columns = [column_names[0] for column_names in self.cur.description]
+            # Преобразуем список картажей в список словарей для читаемости полученых данных
+            avg_speed = self.__db_date_tuple_to_dict(columns, rows)
+            return avg_speed
     def get_aeroplanes_with_higher_speed(self) -> None:
         """получает список всех самолетов, у которых скорость выше средней"""
         pass
