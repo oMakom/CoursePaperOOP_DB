@@ -68,6 +68,14 @@ class DBManager:
                     f"INSERT INTO aeroplanes (country_id, callsign, reg_country, velocity, altitude) VALUES (%s, %s, %s, %s, %s)",
                     (country_id, date[1], date[2], date[9], date[7]))
 
+    @staticmethod
+    def __db_date_tuple_to_dict(columns: list, rows: list[tuple]) -> list[dict]:
+        """Преобразует данные из базы дынных в удобочитаемый вид(список кортежей в список словарей)"""
+        date = []
+        for row in rows:
+            date.append(dict(zip(columns, row)))
+        return date
+
     def get_countries_and_aeroplanes_count(self) -> list[dict]:
         """получает список всех стран и количество самолетов в их воздушных пространствах"""
         with self.conn:
@@ -78,27 +86,22 @@ class DBManager:
             rows = self.cur.fetchall()
             #получаем имена столбцов
             columns = [column_names[0] for column_names in self.cur.description]
-            """
-            # Преобразуем список картажей в список словарей для читаемости полученых данных
-            countries_and_aeroplanes_count = []
-            for row in rows:
-                countries_and_aeroplanes_count.append(dict(zip(columns, row)))
-            """
             # Преобразуем список картажей в список словарей для читаемости полученых данных
             countries_and_aeroplanes_count = self.__db_date_tuple_to_dict(columns, rows)
             return countries_and_aeroplanes_count
 
-    @staticmethod
-    def __db_date_tuple_to_dict(columns: list, rows: list[tuple]) -> list[dict]:
-        """Преобразует данные из базы дынных в удобочитаемый вид(список кортежей в список словарей)"""
-        date = []
-        for row in rows:
-            date.append(dict(zip(columns, row)))
-        return date
-
-    def get_all_aeroplanes(self) -> None:
+    def get_all_aeroplanes(self) -> list[dict]:
         """получает список всех воздушных судов"""
-        pass
+        with self.conn:
+            self.cur.execute("""SELECT DISTINCT ON (callsign) * FROM aeroplanes""")
+            # получаем данные столбцов(строки)
+            rows = self.cur.fetchall()
+            # получаем имена столбцов
+            columns = [column_names[0] for column_names in self.cur.description]
+            # Преобразуем список картажей в список словарей для читаемости полученых данных
+            all_aeroplanes = self.__db_date_tuple_to_dict(columns, rows)
+            return all_aeroplanes
+
     def get_avg_speed(self) -> None:
         """получает среднюю скорость по самолетам"""
         pass
