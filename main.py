@@ -1,108 +1,75 @@
-from src.aircraft_data_handler import Aeroplane
-from src.api_connector import ApiAeroplanesCountry, ApiCountryCoordinates
-from src.interface import (filter_aeroplanes, get_aeroplanes_by_altitude, get_aeroplanes_by_country,
-                           get_top_aeroplanes, print_all_aeroplanes, sort_aeroplanes)
-from src.json_saver import JSONSaver
+import os
 
-# Создание экземпляра класса для работы с API страны
-api_county = ApiCountryCoordinates()
-# Получение информации о коордмнатых страны с nominatim.openstreetmap.org
-geo_coord = api_county.fetch_data("RUSSIA")
-# Создание экземпляра класса для работы с API самолетов
-api_aeroplanes = ApiAeroplanesCountry()
-# Получение информации о самолетах с opensky-network.org
-aeroplanes_list = api_aeroplanes.fetch_data(geo_coord)
-# Преобразование набора данных в список объектов
-aeroplanes = Aeroplane.cast_to_object_list(aeroplanes_list)
-# Пример работы контструктора класса с одним самолетом
-aeroplane = Aeroplane("UAL1621", "United States", 268.79, 10203.18)
-aeroplane_2 = Aeroplane("UAL1621", "United States", 200.79, 10203.18)
-aeroplane_3 = Aeroplane("UAL", "United States", 150.79, 10203.18)
-print(aeroplane)
-print(f"{aeroplanes[0].velocity}, {aeroplanes[0].altitude}")
-print(f"{aeroplanes[2].velocity}, {aeroplanes[2].altitude}")
-print(f"1 > 3 :{aeroplanes[0] > aeroplanes[2]}")
-print(f"1 = 3 :{aeroplanes[0] == aeroplanes[2]}")
-print(f"1 < 3 :{aeroplanes[0] < aeroplanes[2]}")
-# Сохранение информации в файл
-json_saver = JSONSaver()
-json_saver.add_aeroplane(aeroplanes)
-json_saver.add_aeroplane(aeroplane)
-json_saver.add_aeroplane(aeroplane_2)
-json_saver.add_aeroplane(aeroplane_3)
-json_saver.delete_aeroplane("DMFEY")
+from dotenv import load_dotenv
 
-# Функция для взаимодействия с пользователем
+from api_connector import ApiCountryCoordinates, ApiAeroplanesCountry
+from database import DBManager
 
 
-def user_interaction() -> None:
-    while True:
-        country = input("Введите название страны (пример ввода: RUSSIA): ")  # Например RUSSIA
-        if country:
-            break
-        print("Страна не может быть пустой.")
+def main_db():
+    country_list = ['RUSSIA', 'United States', 'Germany', 'France', 'United Kingdom', 'Canada', 'Estonia', 'Austria', 'Sweden', 'Turkey']
+
+    load_dotenv()
+
+    db_config = {
+        'user': os.getenv('POSTGRES_USER'),
+        'password': os.getenv('POSTGRES_PASSWORD'),
+        'host': os.getenv('POSTGRES_HOST'),
+        'port': os.getenv('POSTGRES_PORT'),
+        'dbname': os.getenv('POSTGRES_DB')
+    }
+
+    db = DBManager(**db_config)
+    # ВНИМАНИЕ: True ТОЛЬКО для ПЕРВОЙ загрузки данных или полного сброса.
+    # Если данные уже есть, оставь False, чтобы не делать запрос API лишний раз и не терять данные.
+    fill_data = False
+
     try:
-        aeroplanes = get_aeroplanes_by_country(country)
-    except Exception as e:
-        print(f"Ошибка при запросе данных: {e}")
-        return
-    if not aeroplanes:
-        print("Данные о самолетах не получены. Завершение программы")
-        return
+        if fill_data:
+            # Код для добавления данных
+            print("--- Очистка и создание таблиц ---")
+            db.refresh_tables()
+            print("--- Загрузка данных из API ---")
+            for country in country_list:
+                api_county = ApiCountryCoordinates()
+                geo_coord = api_county.fetch_data(country)
 
-    # фильтрация по стране регистрации
-    filter_words = (
-        input(
-            "Введите названия стран для фильтрации по стране регистрации через запятую "
-            "(пример ввода: United States, Germany): "
-        )
-        .strip()
-        .split(",")
-    )
+                api_aeroplanes = ApiAeroplanesCountry()
+                aeroplanes_list = api_aeroplanes.fetch_data(geo_coord)
 
-    filtered_aeroplanes = filter_aeroplanes(aeroplanes, filter_words)
-
-    # фильтрация по диапазону высот полета
-    while True:
-        altitude_range = input("Введите диапазон высот полета (Пример ввода: 200 - 10200): ")
-        if altitude_range:
-            range_list = altitude_range.split("-")
-            try:
-                altitude_min = int(range_list[0])
-                altitude_max = int(range_list[1])
-
-                if altitude_min >= altitude_max:
-                    print("Минимальная высота должна быть меньше максимальной")
-                if altitude_min < altitude_max:
-                    ranged_aeroplanes = get_aeroplanes_by_altitude(filtered_aeroplanes, altitude_range)
-                    break
-
-            except ValueError:
-                print("Высота должна быть числом")
-        else:
-            print("Данные диапазона высот не введены. Фильтрация по диапазону высот пропущена")
-            ranged_aeroplanes = filtered_aeroplanes
-            break
-
-    # сортировка по высоте полета по убыванию
-    sorted_by_altitude = sort_aeroplanes(ranged_aeroplanes)
-
-    # вывод топ n самолетов
-    while True:
-        top_n = input("Введите количество самолетов для вывода в топ N: ").strip()
-        try:
-            n = int(top_n)
-            if n > 0:
-                break
-            print("Число должно быть больше 0.")
-        except ValueError:
-            print("Введите целое число.")
-
-    top_n_aeroplanes = get_top_aeroplanes(sorted_by_altitude, top_n)
-
-    # вывод результата
-    print_all_aeroplanes(top_n_aeroplanes)
-
+                db.insert_data(country, geo_coord, aeroplanes_list)
+            print("Данные загружены (закомментировано для демонстрации).")
+        print('------------------------------#1  (Страны и кол-во самолётов)------------------------------------')
+        # список всех стран и количество самолетов в их воздушных пространствах
+        metod_1 = db.get_countries_and_aeroplanes_count()
+        print(f"Найдено записей (страны + кол-во самолётов): {len(metod_1)}")
+        for item in metod_1:
+            print(item)
+        print('------------------------------#2 Все уникальные самолёты------------------------------------')
+        # список всех воздушных судов (уникальных, так как "области" стран могут накладываться)
+        metod_2 = db.get_all_aeroplanes()
+        print(f"Всего уникальных самолётов: {len(metod_2)}")
+        for item in metod_2[:25]:  # для проверки первые 25
+            print(item)
+        print('------------------------------#3 Средняя скорость (AVG)------------------------------------')
+        # средняя скорость по всем уникальным самолетам
+        metod_3 = db.get_avg_speed()
+        print(f"Средняя скорость уникальных самолётов: {metod_3[0]["aeroplanes_avg_velocity"]:.2f}")
+        print(metod_3)
+        print('------------------------------#4 Самолёты выше средней------------------------------------')
+        # список всех самолетов, у которых скорость выше средней
+        metod_4 = db.get_aeroplanes_with_higher_speed()
+        print(f"Самолётов со скоростью выше средней: {len(metod_4)}")
+        for item in metod_4[:25]: # для проверки первые 25
+            print(item)
+        print('------------------------------#5 Поиск по ключевым словам------------------------------------')
+        # список всех самолетов, в позывном которых содержатся переданные в метод символы
+        metod_5 = db.get_aeroplanes_with_keyword('aca')
+        print(f"Найдено самолётов с 'aca' в позывном: {len(metod_5)}")
+        for item in metod_5[:25]:  # для проверки первые 25
+            print(item)
+    finally:
+        db.close()
 
 if __name__ == "__main__":
-    user_interaction()
+    main_db()
